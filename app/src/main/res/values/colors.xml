@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Binance-inspired dark theme colors -->
+    <color name="binance_background">#181A20</color>
+    <color name="binance_card_background">#1E2026</color>
+    <color name="binance_primary">#F0B90B</color>
+    <color name="binance_primary_dark">#C8960E</color>
+    <color name="binance_text_primary">#EAECEF</color>
+    <color name="binance_text_secondary">#848E9C</color>
+    <color name="binance_green">#0ECB81</color>
+    <color name="binance_red">#F6465D</color>
+    <color name="binance_divider">#2B3139</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

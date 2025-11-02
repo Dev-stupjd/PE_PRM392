@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CexSimulator" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/binance_background</item>
+        <item name="android:navigationBarColor">@color/binance_background</item>
+        <item name="android:windowBackground">@color/binance_background</item>
+        <item name="colorPrimary">@color/binance_primary</item>
+        <item name="android:textColorPrimary">@color/binance_text_primary</item>
+        <item name="android:textColorSecondary">@color/binance_text_secondary</item>
+        <item name="colorSurface">@color/binance_card_background</item>
+        <item name="colorOnSurface">@color/binance_text_primary</item>
+    </style>
+</resources>
