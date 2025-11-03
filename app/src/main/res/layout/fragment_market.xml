@@ -2,11 +2,9 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/binance_background"
-    tools:context=".OrdersActivity">
+    android:background="@color/binance_background">
 
     <TextView
         android:id="@+id/tvTitle"
@@ -14,7 +12,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="24dp"
-        android:text="My Orders"
+        android:text="Markets"
         android:textColor="@color/binance_text_primary"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -22,26 +20,15 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewOrders"
+        android:id="@+id/recyclerViewTokens"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
         android:padding="8dp"
-        app:layout_constraintBottom_toTopOf="@+id/bottomNavigation"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvTitle" />
 
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNavigation"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="@color/binance_card_background"
-        app:itemIconTint="@color/binance_text_secondary"
-        app:itemTextColor="@color/binance_text_secondary"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:menu="@menu/bottom_navigation" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>
+

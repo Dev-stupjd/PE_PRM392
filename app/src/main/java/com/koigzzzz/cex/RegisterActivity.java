@@ -100,7 +100,7 @@ public class RegisterActivity extends AppCompatActivity {
                                 firebaseHelper.createUserDocument(user, createTask -> {
                                     if (createTask.isSuccessful()) {
                                         Toast.makeText(RegisterActivity.this, "Registration successful!", Toast.LENGTH_SHORT).show();
-                                        Intent intent = new Intent(RegisterActivity.this, MarketActivity.class);
+                                        Intent intent = new Intent(RegisterActivity.this, HomeActivity.class);
                                         startActivity(intent);
                                         finish();
                                     } else {

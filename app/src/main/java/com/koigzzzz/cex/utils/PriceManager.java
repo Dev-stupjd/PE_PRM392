@@ -2,11 +2,14 @@ package com.koigzzzz.cex.utils;
 
 import android.util.Log;
 
-import com.koigzzzz.cex.api.CoinGeckoService;
+import com.koigzzzz.cex.api.LiveCoinWatchService;
+import com.koigzzzz.cex.models.LiveCoinWatchResponse;
 import com.koigzzzz.cex.models.TokenPrice;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import okhttp3.OkHttpClient;
 import retrofit2.Call;
@@ -19,19 +22,23 @@ import java.util.concurrent.TimeUnit;
 
 public class PriceManager {
     private static final String TAG = "PriceManager";
-    private static final String BASE_URL = "https://api.coingecko.com/";
-    private static final int TIMEOUT_SECONDS = 10;
+    private static final String BASE_URL = "https://api.livecoinwatch.com/";
+    private static final int TIMEOUT_SECONDS = 15;
     private static PriceManager instance;
-    private CoinGeckoService apiService;
+    private LiveCoinWatchService apiService;
     private Map<String, TokenPrice> priceCache;
+    private Map<String, Long> cacheTimestamps; // Track when each price was cached
+    private String apiKey;
+    
+    // Cache duration: 5 minutes (300,000 ms) - prices are acceptable if less than 5 min old
+    private static final long CACHE_DURATION_MS = 5 * 60 * 1000;
+    
+    // Rate limit tracking: 10,000 requests per day = ~416 per hour = ~7 per minute
+    private AtomicLong lastRequestTime = new AtomicLong(0);
+    private static final long MIN_REQUEST_INTERVAL_MS = 9000; // Minimum 9 seconds between requests
 
-    // CoinGecko IDs
-    private static final Map<String, String> TOKEN_IDS = new HashMap<String, String>() {{
-        put("BTC", "bitcoin");
-        put("ETH", "ethereum");
-        put("SOL", "solana");
-        put("BNB", "binancecoin");
-    }};
+    // LiveCoinWatch uses coin codes directly
+    private static final String[] SUPPORTED_TOKENS = {"BTC", "ETH", "SOL", "BNB"};
 
     private PriceManager() {
         OkHttpClient okHttpClient = new OkHttpClient.Builder()
@@ -45,8 +52,13 @@ public class PriceManager {
                 .client(okHttpClient)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
-        apiService = retrofit.create(CoinGeckoService.class);
+        apiService = retrofit.create(LiveCoinWatchService.class);
         priceCache = new HashMap<>();
+        cacheTimestamps = new HashMap<>();
+        
+        // Note: API key should be set from app context
+        // For now, using placeholder - should be set via setApiKey() method
+        apiKey = "YOUR_API_KEY_HERE";
     }
 
     public static synchronized PriceManager getInstance() {
@@ -56,119 +68,326 @@ public class PriceManager {
         return instance;
     }
 
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
+    }
+
     public interface PriceCallback {
         void onPriceReceived(TokenPrice tokenPrice);
         void onError(String error);
     }
 
     public void fetchPrice(String symbol, PriceCallback callback) {
-        String tokenId = TOKEN_IDS.get(symbol.toUpperCase());
-        if (tokenId == null) {
+        if (!isSupported(symbol)) {
             callback.onError("Unsupported token: " + symbol);
             return;
         }
 
-        // Build IDs string for multiple tokens
-        String ids = String.join(",", TOKEN_IDS.values());
+        String symbolUpper = symbol.toUpperCase();
+        
+        // Check cache first - return cached price if still fresh
+        TokenPrice cachedPrice = priceCache.get(symbolUpper);
+        Long cacheTime = cacheTimestamps.get(symbolUpper);
+        
+        if (cachedPrice != null && cacheTime != null) {
+            long age = System.currentTimeMillis() - cacheTime;
+            if (age < CACHE_DURATION_MS) {
+                // Cache is still fresh, return it immediately
+                callback.onPriceReceived(cachedPrice);
+                return;
+            }
+        }
 
-        Call<Map<String, Map<String, Double>>> call = apiService.getPrices(
-                ids, "usd", true, true
-        );
+        // Rate limiting: ensure minimum time between requests
+        long now = System.currentTimeMillis();
+        long lastRequest = lastRequestTime.get();
+        long timeSinceLastRequest = now - lastRequest;
+        
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+            // Return cached price even if stale, rather than hitting rate limit
+            if (cachedPrice != null) {
+                callback.onPriceReceived(cachedPrice);
+                return;
+            }
+        }
 
-        call.enqueue(new Callback<Map<String, Map<String, Double>>>() {
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("currency", "USD");
+        requestBody.put("code", symbolUpper);
+        requestBody.put("meta", false);
+
+        lastRequestTime.set(now);
+        Call<LiveCoinWatchResponse> call = apiService.getCoinPrice(apiKey, requestBody);
+
+        call.enqueue(new Callback<LiveCoinWatchResponse>() {
             @Override
-            public void onResponse(Call<Map<String, Map<String, Double>>> call,
-                                   Response<Map<String, Map<String, Double>>> response) {
+            public void onResponse(Call<LiveCoinWatchResponse> call,
+                                   Response<LiveCoinWatchResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    Map<String, Map<String, Double>> prices = response.body();
-                    Map<String, Double> tokenData = prices.get(tokenId);
-
-                    if (tokenData != null) {
-                        double price = tokenData.getOrDefault("usd", 0.0);
-                        double change24h = tokenData.getOrDefault("usd_24h_change", 0.0);
-                        double volume24h = tokenData.getOrDefault("usd_24h_vol", 0.0);
-
-                        TokenPrice tokenPrice = new TokenPrice(
-                                symbol,
-                                getTokenName(symbol),
-                                price,
-                                change24h,
-                                volume24h
-                        );
-
-                        priceCache.put(symbol, tokenPrice);
-                        callback.onPriceReceived(tokenPrice);
-                    } else {
-                        callback.onError("Price data not found for " + symbol);
+                    LiveCoinWatchResponse lcwResponse = response.body();
+                    
+                    double price = lcwResponse.getRate();
+                    double change24h = 0.0;
+                    if (lcwResponse.getDelta() != null && lcwResponse.getDelta().getDay() != 0) {
+                        // delta.day is a multiplier (e.g., 1.0808 = +8.08%), convert to percentage
+                        change24h = (lcwResponse.getDelta().getDay() - 1.0) * 100.0;
                     }
-                } else {
-                    callback.onError("API error: " + response.message());
-                }
+                    double volume24h = lcwResponse.getVolume();
+
+                    TokenPrice tokenPrice = new TokenPrice(
+                            symbol.toUpperCase(),
+                            lcwResponse.getName() != null ? lcwResponse.getName() : getTokenName(symbol),
+                            price,
+                            change24h,
+                            volume24h
+                    );
+
+                    priceCache.put(symbolUpper, tokenPrice);
+                    cacheTimestamps.put(symbolUpper, System.currentTimeMillis());
+                    
+                    // Track price history for charts
+                    PriceHistoryTracker.getInstance().addPricePoint(symbolUpper, price);
+                    
+                    callback.onPriceReceived(tokenPrice);
+                    } else {
+                        String errorMsg = response.message();
+                        if (response.code() == 401) {
+                            errorMsg = "Invalid API key. Please check your LiveCoinWatch API key.";
+                        } else if (response.code() == 429) {
+                            errorMsg = "Rate limit exceeded. Using cached data if available.";
+                            // On rate limit, return cached price even if stale
+                            if (cachedPrice != null) {
+                                callback.onPriceReceived(cachedPrice);
+                                return;
+                            }
+                            // Extend wait time after rate limit error
+                            lastRequestTime.set(System.currentTimeMillis() + (60 * 1000)); // Wait 1 minute
+                        }
+                        Log.e(TAG, "API error: " + response.code() + " - " + errorMsg);
+                        // Return cached price on error if available
+                        if (cachedPrice != null) {
+                            callback.onPriceReceived(cachedPrice);
+                        } else {
+                            callback.onError("API error: " + errorMsg);
+                        }
+                    }
             }
 
             @Override
-            public void onFailure(Call<Map<String, Map<String, Double>>> call, Throwable t) {
-                Log.e(TAG, "Error fetching price", t);
-                callback.onError(t.getMessage());
+            public void onFailure(Call<LiveCoinWatchResponse> call, Throwable t) {
+                Log.e(TAG, "Error fetching price for " + symbol, t);
+                // Return cached price on network error if available
+                if (cachedPrice != null) {
+                    callback.onPriceReceived(cachedPrice);
+                } else {
+                    callback.onError(t.getMessage() != null ? t.getMessage() : "Network error");
+                }
             }
         });
     }
 
     public void fetchAllPrices(AllPricesCallback callback) {
-        String ids = String.join(",", TOKEN_IDS.values());
+        // Use default supported tokens
+        fetchPricesForSymbols(SUPPORTED_TOKENS, callback);
+    }
 
-        Call<Map<String, Map<String, Double>>> call = apiService.getPrices(
-                ids, "usd", true, true
-        );
+    /**
+     * Fetch prices for a list of token symbols dynamically
+     */
+    public void fetchPricesForSymbols(String[] symbols, AllPricesCallback callback) {
+        Map<String, TokenPrice> tokenPrices = new HashMap<>();
+        
+        // First, check cache and add any fresh cached prices
+        boolean allCachedFresh = true;
+        for (String symbol : symbols) {
+            String symbolUpper = symbol.toUpperCase();
+            TokenPrice cachedPrice = priceCache.get(symbolUpper);
+            Long cacheTime = cacheTimestamps.get(symbolUpper);
+            
+            if (cachedPrice != null && cacheTime != null) {
+                long age = System.currentTimeMillis() - cacheTime;
+                if (age < CACHE_DURATION_MS) {
+                    tokenPrices.put(symbolUpper, cachedPrice);
+                    continue;
+                } else {
+                    allCachedFresh = false;
+                }
+            } else {
+                allCachedFresh = false;
+            }
+        }
+        
+        // If all prices are fresh in cache, return immediately
+        if (allCachedFresh && tokenPrices.size() == symbols.length) {
+            callback.onPricesReceived(tokenPrices);
+            return;
+        }
+        
+        // Rate limiting: check if we can make requests
+        long now = System.currentTimeMillis();
+        long lastRequest = lastRequestTime.get();
+        long timeSinceLastRequest = now - lastRequest;
+        
+        // If we can't make requests yet, return cached data (even if stale)
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+            if (!tokenPrices.isEmpty()) {
+                callback.onPricesReceived(tokenPrices);
+            } else {
+                // No cache available, return error
+                callback.onError("Rate limited. Please wait before refreshing.");
+            }
+            return;
+        }
 
-        call.enqueue(new Callback<Map<String, Map<String, Double>>>() {
-            @Override
-            public void onResponse(Call<Map<String, Map<String, Double>>> call,
-                                   Response<Map<String, Map<String, Double>>> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    Map<String, Map<String, Double>> prices = response.body();
-                    Map<String, TokenPrice> tokenPrices = new HashMap<>();
+        AtomicInteger completed = new AtomicInteger(0);
+        AtomicInteger failed = new AtomicInteger(0);
+        
+        // Remove symbols that are already in cache from fetch list
+        String[] tokensToFetch = tokenPrices.size() < symbols.length ?
+            java.util.Arrays.stream(symbols)
+                .filter(s -> !tokenPrices.containsKey(s.toUpperCase()))
+                .toArray(String[]::new) : symbols;
 
-                    for (Map.Entry<String, String> entry : TOKEN_IDS.entrySet()) {
-                        String symbol = entry.getKey();
-                        String tokenId = entry.getValue();
-                        Map<String, Double> tokenData = prices.get(tokenId);
+        if (tokensToFetch.length == 0) {
+            callback.onPricesReceived(tokenPrices);
+            return;
+        }
 
-                        if (tokenData != null) {
-                            double price = tokenData.getOrDefault("usd", 0.0);
-                            double change24h = tokenData.getOrDefault("usd_24h_change", 0.0);
-                            double volume24h = tokenData.getOrDefault("usd_24h_vol", 0.0);
+        String[] errors = new String[tokensToFetch.length];
+        lastRequestTime.set(now);
 
-                            TokenPrice tokenPrice = new TokenPrice(
-                                    symbol,
-                                    getTokenName(symbol),
-                                    price,
-                                    change24h,
-                                    volume24h
-                            );
+        for (int i = 0; i < tokensToFetch.length; i++) {
+            final String symbol = tokensToFetch[i];
+            final int index = i;
 
-                            tokenPrices.put(symbol, tokenPrice);
-                            priceCache.put(symbol, tokenPrice);
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("currency", "USD");
+            requestBody.put("code", symbol);
+            requestBody.put("meta", false);
+
+            Call<LiveCoinWatchResponse> call = apiService.getCoinPrice(apiKey, requestBody);
+
+            call.enqueue(new Callback<LiveCoinWatchResponse>() {
+                @Override
+                public void onResponse(Call<LiveCoinWatchResponse> call,
+                                       Response<LiveCoinWatchResponse> response) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        LiveCoinWatchResponse lcwResponse = response.body();
+                        
+                        double price = lcwResponse.getRate();
+                        double change24h = 0.0;
+                        if (lcwResponse.getDelta() != null && lcwResponse.getDelta().getDay() != 0) {
+                            // delta.day is a multiplier (e.g., 1.0808 = +8.08%), convert to percentage
+                            change24h = (lcwResponse.getDelta().getDay() - 1.0) * 100.0;
                         }
+                        double volume24h = lcwResponse.getVolume();
+
+                        TokenPrice tokenPrice = new TokenPrice(
+                                symbol,
+                                lcwResponse.getName() != null ? lcwResponse.getName() : getTokenName(symbol),
+                                price,
+                                change24h,
+                                volume24h
+                        );
+
+                        tokenPrices.put(symbol, tokenPrice);
+                        priceCache.put(symbol, tokenPrice);
+                        cacheTimestamps.put(symbol, System.currentTimeMillis());
+                        
+                        // Track price history for charts
+                        PriceHistoryTracker.getInstance().addPricePoint(symbol, price);
+                    } else {
+                        String errorMsg = response.message();
+                        if (response.code() == 401) {
+                            errorMsg = "Invalid API key";
+                        } else if (response.code() == 429) {
+                            errorMsg = "Rate limit exceeded";
+                            // Extend wait time after rate limit error
+                            lastRequestTime.set(System.currentTimeMillis() + (60 * 1000)); // Wait 1 minute
+                        }
+                        errors[index] = errorMsg;
+                        failed.incrementAndGet();
                     }
 
-                    callback.onPricesReceived(tokenPrices);
-                } else {
-                    callback.onError("API error: " + response.message());
+                    int done = completed.incrementAndGet();
+                    if (done == tokensToFetch.length) {
+                        // Merge with any cached prices we already had
+                        for (String cachedSymbol : symbols) {
+                            String cachedSymbolUpper = cachedSymbol.toUpperCase();
+                            TokenPrice cachedPrice = priceCache.get(cachedSymbolUpper);
+                            Long cacheTime = cacheTimestamps.get(cachedSymbolUpper);
+                            if (cachedPrice != null && cacheTime != null) {
+                                long age = System.currentTimeMillis() - cacheTime;
+                                if (age < CACHE_DURATION_MS && !tokenPrices.containsKey(cachedSymbolUpper)) {
+                                    tokenPrices.put(cachedSymbolUpper, cachedPrice);
+                                }
+                            }
+                        }
+                        
+                        if (!tokenPrices.isEmpty()) {
+                            callback.onPricesReceived(tokenPrices);
+                        } else {
+                            StringBuilder errorBuilder = new StringBuilder("Failed to fetch prices: ");
+                            for (String error : errors) {
+                                if (error != null) {
+                                    errorBuilder.append(error).append("; ");
+                                }
+                            }
+                            callback.onError(errorBuilder.toString());
+                        }
+                    }
                 }
-            }
 
-            @Override
-            public void onFailure(Call<Map<String, Map<String, Double>>> call, Throwable t) {
-                Log.e(TAG, "Error fetching prices", t);
-                callback.onError(t.getMessage());
-            }
-        });
+                @Override
+                public void onFailure(Call<LiveCoinWatchResponse> call, Throwable t) {
+                    Log.e(TAG, "Error fetching price for " + symbol, t);
+                    errors[index] = t.getMessage() != null ? t.getMessage() : "Network error";
+                    failed.incrementAndGet();
+                    
+                    int done = completed.incrementAndGet();
+                    if (done == tokensToFetch.length) {
+                        // Merge with any cached prices we already had
+                        for (String cachedSymbol : symbols) {
+                            String cachedSymbolUpper = cachedSymbol.toUpperCase();
+                            TokenPrice cachedPrice = priceCache.get(cachedSymbolUpper);
+                            Long cacheTime = cacheTimestamps.get(cachedSymbolUpper);
+                            if (cachedPrice != null && cacheTime != null) {
+                                long age = System.currentTimeMillis() - cacheTime;
+                                if (age < CACHE_DURATION_MS && !tokenPrices.containsKey(cachedSymbolUpper)) {
+                                    tokenPrices.put(cachedSymbolUpper, cachedPrice);
+                                }
+                            }
+                        }
+                        
+                        if (!tokenPrices.isEmpty()) {
+                            callback.onPricesReceived(tokenPrices);
+                        } else {
+                            StringBuilder errorBuilder = new StringBuilder("Failed to fetch prices: ");
+                            for (String error : errors) {
+                                if (error != null) {
+                                    errorBuilder.append(error).append("; ");
+                                }
+                            }
+                            callback.onError(errorBuilder.toString());
+                        }
+                    }
+                }
+            });
+        }
     }
 
     public interface AllPricesCallback {
         void onPricesReceived(Map<String, TokenPrice> prices);
         void onError(String error);
+    }
+
+    private boolean isSupported(String symbol) {
+        for (String token : SUPPORTED_TOKENS) {
+            if (token.equalsIgnoreCase(symbol)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String getTokenName(String symbol) {
@@ -185,4 +404,3 @@ public class PriceManager {
         return priceCache.get(symbol.toUpperCase());
     }
 }
-

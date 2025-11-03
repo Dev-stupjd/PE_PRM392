@@ -48,8 +48,8 @@ public class MainActivity extends AppCompatActivity {
         super.onStart();
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
-            // User is signed in, redirect to MarketActivity
-            Intent intent = new Intent(MainActivity.this, MarketActivity.class);
+            // User is signed in, redirect to HomeActivity
+            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
             startActivity(intent);
             finish();
         }

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Cex Simulator</string>
+    <!-- Replace with your LiveCoinWatch API Key -->
+    <string name="livecoinwatch_api_key">30f21035-e9d4-43c7-9214-625eb8ecd675</string>
 </resources>

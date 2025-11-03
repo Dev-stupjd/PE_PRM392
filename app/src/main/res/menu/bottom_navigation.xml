@@ -13,6 +13,11 @@
         android:icon="@android:drawable/ic_menu_recent_history"
         android:title="Orders" />
     <item
+        android:id="@+id/nav_admin"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Admin"
+        android:visible="false" />
+    <item
         android:id="@+id/nav_logout"
         android:icon="@android:drawable/ic_menu_close_clear_cancel"
         android:title="Logout" />

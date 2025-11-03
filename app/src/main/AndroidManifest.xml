@@ -14,16 +14,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CexSimulator">
         <activity
-            android:name=".OrdersActivity"
-            android:exported="false" />
-        <activity
-            android:name=".MarketActivity"
-            android:exported="false" />
-        <activity
-            android:name=".TradeActivity"
-            android:exported="false" />
-        <activity
-            android:name=".PortfolioActivity"
+            android:name=".HomeActivity"
             android:exported="false" />
         <activity
             android:name=".LoginActivity"

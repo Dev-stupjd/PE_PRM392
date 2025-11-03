@@ -14,6 +14,7 @@ import com.koigzzzz.cex.models.TokenPrice;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -66,22 +67,38 @@ public class TokenAdapter extends RecyclerView.Adapter<TokenAdapter.TokenViewHol
             tvSymbol.setText(token.getSymbol());
             tvName.setText(token.getName());
 
-            NumberFormat priceFormat = new DecimalFormat("#,##0.00");
-            tvPrice.setText("$" + priceFormat.format(token.getPrice()));
-
-            double change24h = token.getChange24h();
-            String changeText = String.format(Locale.US, "%.2f%%", change24h);
-            tvChange24h.setText(changeText);
-
-            if (change24h >= 0) {
-                tvChange24h.setTextColor(Color.parseColor("#0ECB81")); // Green
+            // Handle price display - show "N/A" if price is 0 (not available)
+            if (token.getPrice() > 0) {
+                NumberFormat priceFormat = new DecimalFormat("#,##0.00");
+                tvPrice.setText("$" + priceFormat.format(token.getPrice()));
             } else {
-                tvChange24h.setTextColor(Color.parseColor("#F6465D")); // Red
+                tvPrice.setText("N/A");
             }
 
-            NumberFormat volumeFormat = new DecimalFormat("#,##0.00");
-            String volumeText = "$" + volumeFormat.format(token.getVolume24h() / 1000000) + "M";
-            tvVolume.setText(volumeText);
+            double change24h = token.getChange24h();
+            // Only show percentage if price is available
+            if (token.getPrice() > 0) {
+                String changeText = String.format(Locale.US, "%.2f%%", change24h);
+                tvChange24h.setText(changeText);
+
+                if (change24h >= 0) {
+                    tvChange24h.setTextColor(Color.parseColor("#0ECB81")); // Green
+                } else {
+                    tvChange24h.setTextColor(Color.parseColor("#F6465D")); // Red
+                }
+            } else {
+                tvChange24h.setText("N/A");
+                tvChange24h.setTextColor(Color.parseColor("#848E9C")); // Gray
+            }
+
+            // Handle volume display
+            if (token.getVolume24h() > 0) {
+                NumberFormat volumeFormat = new DecimalFormat("#,##0.00");
+                String volumeText = "$" + volumeFormat.format(token.getVolume24h() / 1000000) + "M";
+                tvVolume.setText(volumeText);
+            } else {
+                tvVolume.setText("N/A");
+            }
 
             itemView.setOnClickListener(v -> {
                 if (listener != null) {
