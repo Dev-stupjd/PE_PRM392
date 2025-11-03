@@ -14,7 +14,7 @@
         android:layout_width="120dp"
         android:layout_height="120dp"
         android:layout_marginTop="100dp"
-        android:src="@android:drawable/ic_menu_gallery"
+        android:src="@drawable/binance"
         android:contentDescription="Logo"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

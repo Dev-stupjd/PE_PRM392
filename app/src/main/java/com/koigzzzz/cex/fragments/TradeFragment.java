@@ -141,7 +141,8 @@ public class TradeFragment extends Fragment {
             tilPrice.setVisibility(View.VISIBLE);
             tvMarketPriceIndicator.setVisibility(View.GONE);
             if (currentTokenPrice != null) {
-                etPrice.setText(String.valueOf(currentTokenPrice.getPrice()));
+                DecimalFormat priceInputFormat = new DecimalFormat("#.####");
+                etPrice.setText(priceInputFormat.format(currentTokenPrice.getPrice()));
             }
         }
     }
@@ -324,11 +325,7 @@ public class TradeFragment extends Fragment {
                     Map<String, Object> walletMap = (Map<String, Object>) doc.get("wallet");
                     if (walletMap != null) {
                         userWallet = new Wallet();
-                        userWallet.setUsdt(((Number) walletMap.get("usdt")).doubleValue());
-                        userWallet.setBtc(((Number) walletMap.get("btc")).doubleValue());
-                        userWallet.setEth(((Number) walletMap.get("eth")).doubleValue());
-                        userWallet.setSol(((Number) walletMap.get("sol")).doubleValue());
-                        userWallet.setBnb(((Number) walletMap.get("bnb")).doubleValue());
+                        userWallet.loadFromMap(walletMap); // Supports dynamic tokens
                         if (isAdded() && getContext() != null) {
                             updateBalanceDisplay();
                         }
@@ -365,7 +362,8 @@ public class TradeFragment extends Fragment {
                 } else if (checkedButtonId == R.id.btnLimitOrder) {
                     // Auto-fill current price for limit orders (only if empty)
                     if (etPrice.getText().toString().trim().isEmpty()) {
-                        etPrice.setText(String.valueOf(tokenPrice.getPrice()));
+                        DecimalFormat priceInputFormat = new DecimalFormat("#.####");
+                        etPrice.setText(priceInputFormat.format(tokenPrice.getPrice()));
                     }
                 }
                 
@@ -407,11 +405,7 @@ public class TradeFragment extends Fragment {
                 Map<String, Object> walletMap = (Map<String, Object>) walletDoc.get("wallet");
                 if (walletMap != null) {
                     userWallet = new Wallet();
-                    userWallet.setUsdt(((Number) walletMap.get("usdt")).doubleValue());
-                    userWallet.setBtc(((Number) walletMap.get("btc")).doubleValue());
-                    userWallet.setEth(((Number) walletMap.get("eth")).doubleValue());
-                    userWallet.setSol(((Number) walletMap.get("sol")).doubleValue());
-                    userWallet.setBnb(((Number) walletMap.get("bnb")).doubleValue());
+                    userWallet.loadFromMap(walletMap); // Supports dynamic tokens
                 }
             }
 

@@ -78,11 +78,9 @@ public class PriceManager {
     }
 
     public void fetchPrice(String symbol, PriceCallback callback) {
-        if (!isSupported(symbol)) {
-            callback.onError("Unsupported token: " + symbol);
-            return;
-        }
-
+        // Removed isSupported check - tokens are now dynamic from Firestore
+        // API will handle unsupported tokens by returning an error response
+        
         String symbolUpper = symbol.toUpperCase();
         
         // Check cache first - return cached price if still fresh

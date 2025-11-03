@@ -10,4 +10,16 @@
         <item name="colorSurface">@color/binance_card_background</item>
         <item name="colorOnSurface">@color/binance_text_primary</item>
     </style>
+    
+    <!-- Custom AlertDialog theme for better contrast -->
+    <style name="AlertDialogTheme" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+        <item name="colorSurface">@color/binance_card_background</item>
+        <item name="colorOnSurface">@color/binance_text_primary</item>
+        <item name="android:textColorPrimary">@color/binance_text_primary</item>
+        <item name="android:textColorSecondary">@color/binance_text_secondary</item>
+        <item name="colorPrimary">@color/binance_primary</item>
+        <item name="colorControlNormal">@color/binance_primary</item>
+        <item name="android:background">@color/binance_card_background</item>
+        <item name="android:windowBackground">@color/binance_card_background</item>
+    </style>
 </resources>

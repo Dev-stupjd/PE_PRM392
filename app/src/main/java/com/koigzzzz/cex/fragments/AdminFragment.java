@@ -14,6 +14,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -160,7 +161,7 @@ public class AdminFragment extends Fragment {
     private void showAddTokenDialog() {
         if (getContext() == null) return;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext(), R.style.AlertDialogTheme);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_token_edit, null);
         builder.setView(dialogView);
         builder.setTitle("Add New Token");
@@ -169,7 +170,20 @@ public class AdminFragment extends Fragment {
         EditText etName = dialogView.findViewById(R.id.etName);
         Switch switchEnabled = dialogView.findViewById(R.id.switchEnabled);
 
-        builder.setPositiveButton("Add", (dialog, which) -> {
+        builder.setPositiveButton("Add", null);
+        builder.setNegativeButton("Cancel", null);
+        
+        AlertDialog dialog = builder.create();
+        
+        dialog.setOnShowListener(d -> {
+            // Style the buttons for better visibility
+            if (getContext() != null) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_green));
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_text_primary));
+            }
+            
+            // Set button click listeners after dialog is shown
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String symbol = etSymbol.getText().toString().trim();
             String name = etName.getText().toString().trim();
             boolean enabled = switchEnabled.isChecked();
@@ -188,22 +202,23 @@ public class AdminFragment extends Fragment {
                 if (createTask.isSuccessful()) {
                     Toast.makeText(getContext(), "Token added successfully", Toast.LENGTH_SHORT).show();
                     loadTokens();
+                    dialog.dismiss();
                 } else {
                     if (getContext() != null) {
                         Toast.makeText(getContext(), "Error adding token: " + createTask.getException().getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 }
             });
+            });
         });
-
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+        
+        dialog.show();
     }
 
     private void showEditTokenDialog(Token token) {
         if (getContext() == null) return;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext(), R.style.AlertDialogTheme);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_token_edit, null);
         builder.setView(dialogView);
         builder.setTitle("Edit Token");
@@ -216,47 +231,61 @@ public class AdminFragment extends Fragment {
         etName.setText(token.getName());
         switchEnabled.setChecked(token.isEnabled());
 
-        builder.setPositiveButton("Update", (dialog, which) -> {
-            String symbol = etSymbol.getText().toString().trim();
-            String name = etName.getText().toString().trim();
-            boolean enabled = switchEnabled.isChecked();
-
-            if (TextUtils.isEmpty(symbol)) {
-                Toast.makeText(getContext(), "Symbol is required", Toast.LENGTH_SHORT).show();
-                return;
+        builder.setPositiveButton("Update", null);
+        builder.setNegativeButton("Cancel", null);
+        
+        AlertDialog dialog = builder.create();
+        
+        dialog.setOnShowListener(d -> {
+            // Style the buttons for better visibility
+            if (getContext() != null) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_green));
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_text_primary));
             }
-            if (TextUtils.isEmpty(name)) {
-                Toast.makeText(getContext(), "Name is required", Toast.LENGTH_SHORT).show();
-                return;
-            }
+            
+            // Override positive button to prevent auto-dismiss
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String symbol = etSymbol.getText().toString().trim();
+                String name = etName.getText().toString().trim();
+                boolean enabled = switchEnabled.isChecked();
 
-            token.setSymbol(symbol);
-            token.setName(name);
-            token.setEnabled(enabled);
-
-            firebaseHelper.updateToken(token.getTokenId(), token, updateTask -> {
-                if (updateTask.isSuccessful()) {
-                    Toast.makeText(getContext(), "Token updated successfully", Toast.LENGTH_SHORT).show();
-                    loadTokens();
-                } else {
-                    if (getContext() != null) {
-                        Toast.makeText(getContext(), "Error updating token: " + updateTask.getException().getMessage(), Toast.LENGTH_SHORT).show();
-                    }
+                if (TextUtils.isEmpty(symbol)) {
+                    Toast.makeText(getContext(), "Symbol is required", Toast.LENGTH_SHORT).show();
+                    return;
                 }
+                if (TextUtils.isEmpty(name)) {
+                    Toast.makeText(getContext(), "Name is required", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                token.setSymbol(symbol);
+                token.setName(name);
+                token.setEnabled(enabled);
+
+                firebaseHelper.updateToken(token.getTokenId(), token, updateTask -> {
+                    if (updateTask.isSuccessful()) {
+                        Toast.makeText(getContext(), "Token updated successfully", Toast.LENGTH_SHORT).show();
+                        loadTokens();
+                        dialog.dismiss();
+                    } else {
+                        if (getContext() != null) {
+                            Toast.makeText(getContext(), "Error updating token: " + updateTask.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
             });
         });
-
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+        
+        dialog.show();
     }
 
     private void showDeleteConfirmDialog(Token token) {
         if (getContext() == null) return;
 
-        new AlertDialog.Builder(getContext())
+        AlertDialog dialog = new AlertDialog.Builder(getContext(), R.style.AlertDialogTheme)
                 .setTitle("Delete Token")
                 .setMessage("Are you sure you want to delete " + token.getSymbol() + "?")
-                .setPositiveButton("Delete", (dialog, which) -> {
+                .setPositiveButton("Delete", (d, which) -> {
                     firebaseHelper.deleteToken(token.getTokenId(), deleteTask -> {
                         if (deleteTask.isSuccessful()) {
                             Toast.makeText(getContext(), "Token deleted successfully", Toast.LENGTH_SHORT).show();
@@ -269,7 +298,17 @@ public class AdminFragment extends Fragment {
                     });
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+        
+        dialog.setOnShowListener(d -> {
+            // Style the buttons for better visibility
+            if (getContext() != null) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_red));
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ContextCompat.getColor(getContext(), R.color.binance_text_primary));
+            }
+        });
+        
+        dialog.show();
     }
 
     @Override

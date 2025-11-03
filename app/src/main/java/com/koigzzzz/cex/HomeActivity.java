@@ -20,6 +20,7 @@ import com.koigzzzz.cex.fragments.AdminFragment;
 import com.koigzzzz.cex.fragments.MarketFragment;
 import com.koigzzzz.cex.fragments.OrdersFragment;
 import com.koigzzzz.cex.fragments.PortfolioFragment;
+import com.koigzzzz.cex.fragments.ProfileFragment;
 import com.koigzzzz.cex.fragments.TradeFragment;
 import com.koigzzzz.cex.utils.FirebaseHelper;
 
@@ -57,12 +58,14 @@ public class HomeActivity extends AppCompatActivity {
             bottomNavigation.getMenu().findItem(R.id.nav_market).setVisible(false);
             bottomNavigation.getMenu().findItem(R.id.nav_portfolio).setVisible(false);
             bottomNavigation.getMenu().findItem(R.id.nav_orders).setVisible(false);
+            bottomNavigation.getMenu().findItem(R.id.nav_profile).setVisible(false);
             bottomNavigation.getMenu().findItem(R.id.nav_admin).setVisible(true);
         } else {
-            // Regular user: Show Market, Portfolio, Orders, hide Admin
+            // Regular user: Show Market, Portfolio, Orders, Profile, hide Admin
             bottomNavigation.getMenu().findItem(R.id.nav_market).setVisible(true);
             bottomNavigation.getMenu().findItem(R.id.nav_portfolio).setVisible(true);
             bottomNavigation.getMenu().findItem(R.id.nav_orders).setVisible(true);
+            bottomNavigation.getMenu().findItem(R.id.nav_profile).setVisible(true);
             bottomNavigation.getMenu().findItem(R.id.nav_admin).setVisible(false);
         }
         
@@ -85,6 +88,8 @@ public class HomeActivity extends AppCompatActivity {
                     fragment = new PortfolioFragment();
                 } else if (itemId == R.id.nav_orders) {
                     fragment = new OrdersFragment();
+                } else if (itemId == R.id.nav_profile) {
+                    fragment = new ProfileFragment();
                 } else if (itemId == R.id.nav_admin) {
                     if (firebaseHelper.isAdmin()) {
                         fragment = new AdminFragment();

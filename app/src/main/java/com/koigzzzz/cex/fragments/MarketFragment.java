@@ -3,6 +3,8 @@ package com.koigzzzz.cex.fragments;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +16,8 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.widget.Button;
+import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.koigzzzz.cex.R;
@@ -23,6 +27,8 @@ import com.koigzzzz.cex.utils.FirebaseHelper;
 import com.koigzzzz.cex.utils.PriceManager;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +38,10 @@ public class MarketFragment extends Fragment {
     private RecyclerView recyclerView;
     private TokenAdapter adapter;
     private List<TokenPrice> tokenList;
+    private List<TokenPrice> allTokenList; // Store all tokens for filtering
+    private TextInputEditText etSearch;
+    private Button btnSortByName;
+    private boolean isSortedByName = false;
     private PriceManager priceManager;
     private FirebaseHelper firebaseHelper;
     private Handler priceRefreshHandler;
@@ -55,7 +65,10 @@ public class MarketFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_market, container, false);
         
         tokenList = new ArrayList<>();
+        allTokenList = new ArrayList<>();
         recyclerView = view.findViewById(R.id.recyclerViewTokens);
+        etSearch = view.findViewById(R.id.etSearch);
+        btnSortByName = view.findViewById(R.id.btnSortByName);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new TokenAdapter(tokenList, tokenPrice -> {
@@ -66,9 +79,87 @@ public class MarketFragment extends Fragment {
         });
         recyclerView.setAdapter(adapter);
 
+        // Setup search functionality
+        setupSearch();
+        
+        // Setup sort button
+        btnSortByName.setOnClickListener(v -> toggleSortByName());
+
         loadEnabledTokens();
 
         return view;
+    }
+
+    private void setupSearch() {
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterTokens(s.toString().trim());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+    }
+
+    private void toggleSortByName() {
+        isSortedByName = !isSortedByName;
+        if (isSortedByName) {
+            btnSortByName.setText("Sort by Symbol");
+        } else {
+            btnSortByName.setText("Sort by Name");
+        }
+        // Re-apply current filter with new sort order
+        String searchQuery = etSearch.getText() != null ? etSearch.getText().toString().trim() : "";
+        filterTokens(searchQuery);
+    }
+
+    private void filterTokens(String query) {
+        tokenList.clear();
+        List<TokenPrice> filteredList = new ArrayList<>();
+        
+        if (query.isEmpty()) {
+            // Show all tokens
+            filteredList.addAll(allTokenList);
+        } else {
+            // Filter by symbol (case-insensitive)
+            String queryUpper = query.toUpperCase();
+            for (TokenPrice token : allTokenList) {
+                // Search by symbol only, not by name
+                if (token.getSymbol().toUpperCase().contains(queryUpper)) {
+                    filteredList.add(token);
+                }
+            }
+        }
+        
+        // Apply sorting if enabled
+        if (isSortedByName) {
+            Collections.sort(filteredList, new Comparator<TokenPrice>() {
+                @Override
+                public int compare(TokenPrice t1, TokenPrice t2) {
+                    // Sort by token name (case-insensitive)
+                    String name1 = t1.getName() != null ? t1.getName().toLowerCase() : "";
+                    String name2 = t2.getName() != null ? t2.getName().toLowerCase() : "";
+                    return name1.compareTo(name2);
+                }
+            });
+        } else {
+            // Sort by symbol (default)
+            Collections.sort(filteredList, new Comparator<TokenPrice>() {
+                @Override
+                public int compare(TokenPrice t1, TokenPrice t2) {
+                    return t1.getSymbol().compareToIgnoreCase(t2.getSymbol());
+                }
+            });
+        }
+        
+        tokenList.addAll(filteredList);
+        adapter.notifyDataSetChanged();
     }
 
     private void startAutoRefresh() {
@@ -177,7 +268,7 @@ public class MarketFragment extends Fragment {
     private void updateTokenList(Map<String, TokenPrice> prices) {
         if (!isAdded() || getContext() == null) return;
         
-        tokenList.clear();
+        allTokenList.clear();
         // Add tokens in order from enabledTokenSymbols
         // Show all enabled tokens, even if price data is not available
         for (String symbol : enabledTokenSymbols) {
@@ -186,7 +277,7 @@ public class MarketFragment extends Fragment {
             
             if (tokenPrice != null) {
                 // Token has price data
-                tokenList.add(tokenPrice);
+                allTokenList.add(tokenPrice);
             } else {
                 // Token doesn't have price data yet, create placeholder
                 // This ensures newly added tokens appear immediately
@@ -201,10 +292,13 @@ public class MarketFragment extends Fragment {
                     0.0, // 24h change unavailable
                     0.0  // 24h volume unavailable
                 );
-                tokenList.add(placeholderPrice);
+                allTokenList.add(placeholderPrice);
             }
         }
-        adapter.notifyDataSetChanged();
+        
+        // Apply current search filter
+        String searchQuery = etSearch.getText() != null ? etSearch.getText().toString().trim() : "";
+        filterTokens(searchQuery);
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
@@ -163,6 +164,108 @@ public class FirebaseHelper {
                 .get()
                 .addOnCompleteListener(listener)
                 .addOnFailureListener(e -> Log.e(TAG, "Error getting token", e));
+    }
+
+    // Off-chain payment functions
+    public void findUserByUsername(String username, OnCompleteListener<QuerySnapshot> listener) {
+        db.collection("users")
+                .whereEqualTo("username", username)
+                .limit(1)
+                .get()
+                .addOnCompleteListener(listener)
+                .addOnFailureListener(e -> Log.e(TAG, "Error finding user by username", e));
+    }
+
+    public void transferTokens(String senderUserId, String recipientUserId, String tokenSymbol, double amount, OnCompleteListener<Void> listener) {
+        // Use a batch write to ensure atomicity
+        com.google.firebase.firestore.WriteBatch batch = db.batch();
+        
+        // Get sender and recipient documents
+        com.google.firebase.firestore.DocumentReference senderRef = db.collection("users").document(senderUserId);
+        com.google.firebase.firestore.DocumentReference recipientRef = db.collection("users").document(recipientUserId);
+        
+        // Get sender wallet first
+        senderRef.get().addOnSuccessListener(senderDoc -> {
+            if (!senderDoc.exists()) {
+                if (listener != null) {
+                    Task<Void> errorTask = Tasks.forException(new Exception("Sender not found"));
+                    listener.onComplete(errorTask);
+                }
+                return;
+            }
+            
+            Map<String, Object> senderWalletMap = (Map<String, Object>) senderDoc.get("wallet");
+            if (senderWalletMap == null) {
+                if (listener != null) {
+                    Task<Void> errorTask = Tasks.forException(new Exception("Sender wallet not found"));
+                    listener.onComplete(errorTask);
+                }
+                return;
+            }
+            
+            // Check balance
+            String tokenKey = tokenSymbol.toLowerCase();
+            double senderBalance = ((Number) senderWalletMap.get(tokenKey)).doubleValue();
+            if (senderBalance < amount) {
+                if (listener != null) {
+                    Task<Void> errorTask = Tasks.forException(new Exception("Insufficient balance"));
+                    listener.onComplete(errorTask);
+                }
+                return;
+            }
+            
+            // Get recipient wallet
+            recipientRef.get().addOnSuccessListener(recipientDoc -> {
+                if (!recipientDoc.exists()) {
+                    if (listener != null) {
+                        Task<Void> errorTask = Tasks.forException(new Exception("Recipient not found"));
+                        listener.onComplete(errorTask);
+                    }
+                    return;
+                }
+                
+                Map<String, Object> recipientWalletMap = (Map<String, Object>) recipientDoc.get("wallet");
+                if (recipientWalletMap == null) {
+                    if (listener != null) {
+                        Task<Void> errorTask = Tasks.forException(new Exception("Recipient wallet not found"));
+                        listener.onComplete(errorTask);
+                    }
+                    return;
+                }
+                
+                // Create new maps for batch update (Firestore requires fresh map references)
+                Map<String, Object> newSenderWallet = new HashMap<>(senderWalletMap);
+                Map<String, Object> newRecipientWallet = new HashMap<>(recipientWalletMap);
+                
+                // Update sender wallet (deduct)
+                double newSenderBalance = senderBalance - amount;
+                newSenderWallet.put(tokenKey, newSenderBalance);
+                batch.update(senderRef, "wallet", newSenderWallet);
+                
+                // Update recipient wallet (add)
+                double recipientBalance = ((Number) recipientWalletMap.get(tokenKey)).doubleValue();
+                double newRecipientBalance = recipientBalance + amount;
+                newRecipientWallet.put(tokenKey, newRecipientBalance);
+                batch.update(recipientRef, "wallet", newRecipientWallet);
+                
+                // Commit batch
+                batch.commit()
+                        .addOnCompleteListener(listener)
+                        .addOnFailureListener(e -> Log.e(TAG, "Error transferring tokens", e));
+            }).addOnFailureListener(e -> {
+                Log.e(TAG, "Error getting recipient document", e);
+                if (listener != null) {
+                    Task<Void> errorTask = Tasks.forException(e);
+                    listener.onComplete(errorTask);
+                }
+            });
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "Error getting sender document", e);
+            if (listener != null) {
+                Task<Void> errorTask = Tasks.forException(e);
+                listener.onComplete(errorTask);
+            }
+        });
     }
 }
 

@@ -94,11 +94,7 @@ public class PortfolioFragment extends Fragment {
                     Map<String, Object> walletMap = (Map<String, Object>) doc.get("wallet");
                     if (walletMap != null) {
                         userWallet = new Wallet();
-                        userWallet.setUsdt(((Number) walletMap.get("usdt")).doubleValue());
-                        userWallet.setBtc(((Number) walletMap.get("btc")).doubleValue());
-                        userWallet.setEth(((Number) walletMap.get("eth")).doubleValue());
-                        userWallet.setSol(((Number) walletMap.get("sol")).doubleValue());
-                        userWallet.setBnb(((Number) walletMap.get("bnb")).doubleValue());
+                        userWallet.loadFromMap(walletMap); // Supports dynamic tokens
                         
                         // Load prices and update display
                         loadPricesAndUpdateDisplay();
